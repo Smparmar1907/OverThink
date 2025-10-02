@@ -1,0 +1,186 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CS2 Educational Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        background: #0b111b; color: #e5e7eb;
+      }
+      header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #182235; }
+      .brand { font-weight: 800; letter-spacing: 0.2px; }
+      .badge { background: #1f2937; color: #93c5fd; padding: 4px 8px; border-radius: 999px; font-size: 12px; }
+      main { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; padding: 16px; }
+      .card { background: #0f172a; border: 1px solid #182235; border-radius: 12px; padding: 16px; }
+      .card h2 { margin: 0 0 12px; font-size: 16px; color: #bfdbfe; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { text-align: left; padding: 8px; border-bottom: 1px solid #182235; font-size: 14px; }
+      .muted { color: #9ca3af; }
+      .row { display: flex; gap: 16px; }
+      .kpi { flex: 1; background: #0b1220; border: 1px solid #182235; border-radius: 10px; padding: 12px; }
+      .kpi .label { font-size: 12px; color: #9ca3af; }
+      .kpi .value { font-size: 20px; font-weight: 700; }
+      .team { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .pill { padding: 2px 8px; border-radius: 999px; background: #1f2a44; font-size: 12px; color: #c7d2fe; }
+      .small { font-size: 12px; }
+      .success { color: #86efac; }
+      .warn { color: #fbbf24; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">CS2 Educational Dashboard</div>
+      <div class="badge" id="wsStatus">WS: connecting…</div>
+    </header>
+    <main>
+      <section class="card">
+        <h2>Map / Round</h2>
+        <div class="row">
+          <div class="kpi">
+            <div class="label">Map</div>
+            <div class="value" id="mapName">—</div>
+          </div>
+          <div class="kpi">
+            <div class="label">Round</div>
+            <div class="value" id="roundNumber">—</div>
+          </div>
+          <div class="kpi">
+            <div class="label">Phase</div>
+            <div class="value" id="roundPhase">—</div>
+          </div>
+        </div>
+        <div class="team" style="margin-top: 12px;">
+          <div>
+            <div class="small muted">CT</div>
+            <div class="value" id="ctScore">0</div>
+          </div>
+          <div>
+            <div class="small muted">T</div>
+            <div class="value" id="tScore">0</div>
+          </div>
+        </div>
+      </section>
+      <section class="card">
+        <h2>Player</h2>
+        <div class="row">
+          <div class="kpi">
+            <div class="label">Name</div>
+            <div class="value" id="playerName">—</div>
+          </div>
+          <div class="kpi">
+            <div class="label">Team</div>
+            <div class="value" id="playerTeam">—</div>
+          </div>
+          <div class="kpi">
+            <div class="label">Health</div>
+            <div class="value" id="playerHealth">—</div>
+          </div>
+          <div class="kpi">
+            <div class="label">Money</div>
+            <div class="value" id="playerMoney">—</div>
+          </div>
+        </div>
+        <div style="margin-top: 12px;">
+          <div class="small muted">Weapons</div>
+          <div id="playerWeapons" class="row" style="flex-wrap: wrap;"></div>
+        </div>
+      </section>
+      <section class="card" style="grid-column: 1 / span 2;">
+        <h2>All Players</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Team</th>
+              <th>Health</th>
+              <th>Armor</th>
+              <th>Money</th>
+              <th>K</th>
+              <th>D</th>
+            </tr>
+          </thead>
+          <tbody id="allPlayers"></tbody>
+        </table>
+      </section>
+    </main>
+
+    <script>
+      const wsStatus = document.getElementById('wsStatus');
+      const mapName = document.getElementById('mapName');
+      const roundNumber = document.getElementById('roundNumber');
+      const roundPhase = document.getElementById('roundPhase');
+      const ctScore = document.getElementById('ctScore');
+      const tScore = document.getElementById('tScore');
+
+      const playerName = document.getElementById('playerName');
+      const playerTeam = document.getElementById('playerTeam');
+      const playerHealth = document.getElementById('playerHealth');
+      const playerMoney = document.getElementById('playerMoney');
+      const playerWeapons = document.getElementById('playerWeapons');
+
+      const allPlayers = document.getElementById('allPlayers');
+
+      let socket;
+      function connect() {
+        socket = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+        socket.addEventListener('open', () => { wsStatus.textContent = 'WS: connected'; wsStatus.style.color = '#86efac'; });
+        socket.addEventListener('close', () => { wsStatus.textContent = 'WS: disconnected'; wsStatus.style.color = '#fbbf24'; setTimeout(connect, 1500); });
+        socket.addEventListener('message', (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'gsi') {
+              render(data.payload);
+            }
+          } catch {}
+        });
+      }
+      connect();
+
+      function render(payload) {
+        if (payload?.map) {
+          mapName.textContent = payload.map.name ?? '—';
+          roundNumber.textContent = payload.map.round ?? '—';
+          ctScore.textContent = payload.map.team_ct?.score ?? 0;
+          tScore.textContent = payload.map.team_t?.score ?? 0;
+        }
+        if (payload?.round) {
+          roundPhase.textContent = payload.round.phase ?? '—';
+        }
+        if (payload?.player) {
+          playerName.textContent = payload.player.name ?? '—';
+          playerTeam.textContent = payload.player.team ?? '—';
+          playerHealth.textContent = payload.player.state?.health ?? '—';
+          playerMoney.textContent = payload.player.state?.money ?? '—';
+          playerWeapons.innerHTML = '';
+          for (const w of (payload.player.weapons || [])) {
+            const pill = document.createElement('div');
+            pill.className = 'pill';
+            pill.textContent = `${w.name || 'unknown'}${w.ammo_clip != null ? ' '+w.ammo_clip : ''}`;
+            playerWeapons.appendChild(pill);
+          }
+        }
+        allPlayers.innerHTML = '';
+        for (const p of (payload.allplayers || [])) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${p.name ?? '—'}</td>
+            <td>${p.team ?? '—'}</td>
+            <td>${p.state?.health ?? '—'}</td>
+            <td>${p.state?.helmet ? 'Helmet' : (p.state?.armor ?? 0)}</td>
+            <td>${p.state?.money ?? 0}</td>
+            <td>${p.state?.kills ?? 0}</td>
+            <td>${p.state?.deaths ?? 0}</td>
+          `;
+          allPlayers.appendChild(tr);
+        }
+      }
+    </script>
+  </body>
+</html>
